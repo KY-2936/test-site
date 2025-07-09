@@ -21,6 +21,7 @@ let stageImage = new Image();
 let gameLoopId;
 let ballSpeed;
 let stageCleared = false;
+let nextStagePending = false; // ⭐️ ← ステージ進行管理
 
 document.addEventListener("keydown", e => {
   if (e.key === "Right" || e.key === "ArrowRight") rightPressed = true;
@@ -32,13 +33,24 @@ document.addEventListener("keyup", e => {
   else if (e.key === "Left" || e.key === "ArrowLeft") leftPressed = false;
 });
 
+// ⭐️ 開始ボタンの動作
 startBtn.addEventListener("click", () => {
   overlay.style.display = 'none';
-  startStage();
+
+  if (nextStagePending) {
+    // ステージクリア後「次へ」ボタンから
+    nextStagePending = false;
+    startStage();
+  } else {
+    // ゲームオーバーや初回「開始」「リトライ」
+    currentStage = 0;
+    startStage();
+  }
 });
 
 function startStage() {
   if (currentStage >= stages.length) {
+    // 最終ステージをクリアした後
     showOverlay("ゲームクリア！おめでとう！", "最初から");
     currentStage = 0;
     return;
@@ -60,9 +72,9 @@ function loadStageImage(src, callback) {
 }
 
 function initGameParameters() {
-  brickRowCount = 5 + currentStage;
-  brickColumnCount = 8 + currentStage;
-  ballSpeed = 3 + currentStage;
+  brickRowCount = 8 + currentStage;
+  brickColumnCount = 5 + currentStage;
+  ballSpeed = 4 + currentStage;
 }
 
 function buildBricks() {
@@ -91,24 +103,25 @@ function resetBallAndPaddle() {
 }
 
 function getFittedImageRect(imgW, imgH, canvasW, canvasH) {
-  // 常にパドルとの間を150ピクセル開ける
-  const RESERVED_SPACE_BELOW = 150 + paddle.height + 20; // 20はボールの余裕
+  const RESERVED_SPACE_BELOW = 60 + paddle.height + 20;
+  const SIDE_MARGIN = 5;
 
   const usableHeight = canvasH - RESERVED_SPACE_BELOW;
+  const usableWidth = canvasW - 2 * SIDE_MARGIN;
+
   const imgAspect = imgW / imgH;
   let drawW, drawH, offsetX, offsetY;
 
-  if (imgAspect > canvasW / usableHeight) {
-    drawW = canvasW;
-    drawH = canvasW / imgAspect;
+  if (imgAspect > usableWidth / usableHeight) {
+    drawW = usableWidth;
+    drawH = usableWidth / imgAspect;
   } else {
     drawH = usableHeight;
     drawW = drawH * imgAspect;
   }
 
   offsetX = (canvasW - drawW) / 2;
-  offsetY = 0; // 上寄せ固定
-
+  offsetY = 0;
   return { drawW, drawH, offsetX, offsetY };
 }
 
@@ -171,8 +184,9 @@ function collisionDetection() {
   if (isStageCleared() && !stageCleared) {
     stageCleared = true;
     cancelAnimationFrame(gameLoopId);
+    nextStagePending = true;
     currentStage++;
-    showOverlay("ステージクリア！", "次へ");
+    showOverlay(`ステージ ${currentStage} クリア！`, "次へ");
   }
 }
 
@@ -218,6 +232,7 @@ function gameLoop() {
       ball.dy = -ball.dy;
     } else {
       cancelAnimationFrame(gameLoopId);
+      nextStagePending = false;
       showOverlay("ゲームオーバー", "リトライ");
       return;
     }
@@ -226,27 +241,25 @@ function gameLoop() {
   ball.x += ball.dx;
   ball.y += ball.dy;
 
+  // キーボード移動残したければこのまま
   if (rightPressed && paddle.x < canvas.width - paddle.width) paddle.x += 6;
   else if (leftPressed && paddle.x > 0) paddle.x -= 6;
 
   gameLoopId = requestAnimationFrame(gameLoop);
 }
 
+// ⭐️ マウス対応
+canvas.addEventListener("mousemove", mouseMoveHandler);
+function mouseMoveHandler(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  paddle.x = mouseX - paddle.width / 2;
+  if (paddle.x < 0) paddle.x = 0;
+  if (paddle.x + paddle.width > canvas.width) paddle.x = canvas.width - paddle.width;
+}
+
 function showOverlay(text, btnText) {
   message.textContent = text;
   startBtn.textContent = btnText;
   overlay.style.display = 'flex';
-}
-
-canvas.addEventListener("mousemove", mouseMoveHandler);
-
-function mouseMoveHandler(e) {
-  const rect = canvas.getBoundingClientRect();
-  const mouseX = e.clientX - rect.left;
-
-  paddle.x = mouseX - paddle.width / 2;
-
-  // 画面端ではみ出さない
-  if (paddle.x < 0) paddle.x = 0;
-  if (paddle.x + paddle.width > canvas.width) paddle.x = canvas.width - paddle.width;
 }
